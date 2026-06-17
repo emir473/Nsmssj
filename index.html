@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D Multiplayer Chat Room</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #1a1a1a; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-user-select: none; user-select: none; }
+        
+        /* Top Navigation Header integration */
+        nav { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; padding: 0.5rem; gap: 0.5rem; border-bottom: solid 1px #444; background-color: #222; position: absolute; top: 0; left: 0; width: 100%; z-index: 90; box-sizing: border-box; }
+        nav a { display: inline-block; min-width: 9rem; padding: 0.5rem; border-radius: 0.2rem; border: solid 1px #555; text-align: center; text-decoration: none; color: #bbb; font-size: 14px; }
+        nav a[aria-current='page'] { color: #00fff0; background-color: #333; border-color: #00fff0; }
+
+        #ui { position: absolute; top: 70px; left: 15px; width: 280px; background: rgba(20, 20, 20, 0.85); color: white; padding: 20px; border-radius: 12px; border: 2px solid #00fff0; z-index: 100; box-shadow: 0 4px 15px rgba(0,0,0,0.5); box-sizing: border-box; }
+        #joinBtn { display: none; width: 100%; padding: 12px; background: #00fff0; border: none; font-weight: bold; margin-top: 12px; cursor: pointer; color: black; border-radius: 6px; font-size: 14px; transition: 0.2s; }
+        #joinBtn:hover { background: #00cccc; }
+        input, button { width: 100%; padding: 10px; margin-top: 8px; box-sizing: border-box; border-radius: 6px; border: none; font-size: 14px; }
+        input[type="text"] { background: #333; color: white; border: 1px solid #555; }
+        button { background: #00fff0; color: black; font-weight: bold; cursor: pointer; }
+        
+        /* Layout adjustments for layout windows */
+        #chatBox { position: absolute; bottom: 20px; left: 20px; width: 340px; height: 260px; background: rgba(20, 20, 20, 0.85); border: 1px solid #444; border-radius: 12px; display: none; flex-direction: column; padding: 12px; z-index: 100; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.5); box-sizing: border-box; }
+        #messages { flex: 1; overflow-y: auto; font-size: 14px; margin-bottom: 8px; padding-right: 5px; }
+        #messages img, #messages video { max-width: 100%; border-radius: 8px; margin-top: 5px; display: block; border: 1px solid #444; }
+        #messages audio { width: 100%; margin-top: 5px; display: block; }
+        #messages .file-link { display: inline-block; background: #333; color: #00fff0; padding: 6px 12px; border-radius: 6px; text-decoration: none; margin-top: 5px; font-size: 12px; border: 1px solid #555; }
+        #typing { font-size: 12px; color: #00fff0; height: 15px; margin-bottom: 4px; font-style: italic; }
+        
+        /* Modernized Chat Bar Layout */
+        .chat-input-container { display: flex; align-items: center; gap: 6px; width: 100%; position: relative; }
+        #chatInput { flex: 1; padding: 10px; background: #333; border: 1px solid #555; color: white; border-radius: 20px; box-sizing: border-box; font-size: 14px; margin: 0; }
+        
+        /* Action Buttons styling */
+        .action-icon-btn { width: 36px; height: 36px; background: #2a2a2a; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; border: 1px solid #444; flex-shrink: 0; transition: background 0.2s; font-size: 16px; margin: 0; }
+        .action-icon-btn:hover { background: #3a3a3a; }
+        .action-icon-btn.active-rec { background: #ff2233; animation: pulse-rec 1.5s infinite; }
+
+        @keyframes pulse-rec {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.08); }
+            100% { transform: scale(1); }
+        }
+
+        /* iPad Style Share Menu Popover Container */
+        #sharePopover { display: none; position: absolute; bottom: 48px; left: 0; width: 200px; background: rgba(30, 30, 30, 0.95); border: 1px solid #555; border-radius: 12px; box-shadow: 0 8px 25px rgba(0,0,0,0.6); z-index: 110; flex-direction: column; overflow: hidden; backdrop-filter: blur(10px); }
+        .popover-item { padding: 12px 16px; color: white; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; text-align: left; }
+        .popover-item:hover { background: rgba(0, 255, 240, 0.15); color: #00fff0; }
+        .popover-item:not(:last-child) { border-bottom: 1px solid #444; }
+
+        /* Top Right Calling Action bar System */
+        #callBar { display: none; position: absolute; top: 70px; right: 20px; gap: 10px; z-index: 100; }
+        .call-trigger-btn { width: 46px; height: 46px; background: #202020; border: 2px solid #00fff0; color: #00fff0; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); transition: all 0.2s; }
+        .call-trigger-btn:hover { background: #00fff0; color: black; transform: scale(1.05); }
+
+        /* Full-Screen Calling Overlay Manager */
+        #callOverlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, #2c3e50, #0f171e); z-index: 1000; flex-direction: column; align-items: center; justify-content: center; color: white; }
+        #callStateTitle { font-size: 26px; font-weight: bold; margin-bottom: 8px; letter-spacing: 1px; text-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+        #callTypeSub { font-size: 16px; color: #00fff0; margin-bottom: 40px; font-style: italic; text-transform: uppercase; }
+        
+        .overlay-action-row { display: flex; gap: 20px; margin-top: 20px; z-index: 1010; }
+        .call-action-btn { width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 22px; color: white; border: none; box-shadow: 0 4px 15px rgba(0,0,0,0.4); transition: transform 0.2s; }
+        .call-action-btn:hover { transform: scale(1.1); }
+        .btn-accept { background: #2ecc71; }
+        .btn-decline { background: #e74c3c; }
+        .btn-control { background: #34495e; border: 1px solid #7f8c8d; font-size: 18px; width: 52px; height: 52px; }
+        .btn-control.muted-active { background: #e67e22; border-color: #ff9f43; }
+
+        /* Video Call Layout rendering stream frames */
+        #videoGrid { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        #remoteVideo { width: 100%; height: 100%; object-fit: cover; pointer-events: auto; }
+        #localVideo { position: absolute; bottom: 20px; right: 20px; width: 100px; height: 150px; object-fit: cover; border: 2px solid #00fff0; border-radius: 8px; background: #000; box-shadow: 0 4px 15px rgba(0,0,0,0.5); transform: scaleX(-1); pointer-events: auto; }
+
+        /* Utility hidden input field hooks */
+        .hidden-file-input { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <a href="#" aria-current="page" onclick="return false;">Home / Chat Space</a>
+        <a href="page2.html">Info & Help</a>
+    </nav>
+
+    <div id="ui">
+        <div id="status">Generating ID...</div>
+        <input type="text" id="peerId" placeholder="Friend's 6-Digit ID">
+        <button onclick="connect()">Connect</button>
+        <button id="joinBtn" onclick="joinRoom(true)">Join 3D Room &#128172;</button>
+    </div>
+
+    <div id="callBar">
+        <div class="call-trigger-btn" onclick="initiateCall(false)" title="Voice Call">ð</div>
+        <div class="call-trigger-btn" onclick="initiateCall(true)" title="Video Call">ð¹</div>
+    </div>
+
+    <div id="callOverlay">
+        <div id="videoGrid">
+            <video id="remoteVideo" autoplay playsinline></video>
+            <video id="localVideo" autoplay playsinline muted></video>
+        </div>
+        <div id="callStateTitle">Call System</div>
+        <div id="callTypeSub">Voice Session</div>
+       
+        <div class="overlay-action-row" id="incomingControls">
+            <button class="call-action-btn btn-accept" onclick="acceptIncomingCall()">â</button>
+            <button class="call-action-btn btn-decline" onclick="declineOrHangupCall()">â</button>
+        </div>
+        <div class="overlay-action-row" id="activeControls" style="display: none;">
+            <button class="call-action-btn btn-control" id="muteMeBtn" onclick="toggleMuteMe()" title="Mute Mic">ð</button>
+            <button class="call-action-btn btn-control" id="muteFriendBtn" onclick="toggleMuteFriend()" title="Mute Friend">ð</button>
+            <button class="call-action-btn btn-control" id="toggleCamBtn" onclick="requestOrToggleCamera()" title="Toggle Camera">ð·</button>
+            <button class="call-action-btn btn-decline" onclick="declineOrHangupCall()" title="Hang Up">ð</button>
+        </div>
+    </div>
+
+    <div id="chatBox">
+        <div id="messages"></div>
+        <div id="typing"></div>
+        <div class="chat-input-container">
+            <div class="action-icon-btn" onclick="toggleSharePopover()">â</div>
+            <div id="sharePopover">
+                <div class="popover-item" onclick="triggerFileInput('file')">ð <span>Upload Files</span></div>
+                <div class="popover-item" onclick="triggerFileInput('gallery')">ð¼ <span>From Gallery</span></div>
+                <div class="popover-item" onclick="triggerFileInput('camera')">ð¸ <span>Take Photo/Video</span></div>
+            </div>
+            <input type="text" id="chatInput" placeholder="Type a message... (Press Enter)">
+            <div class="action-icon-btn" id="voiceRecBtn" onclick="toggleVoiceRecording()" title="Record Audio">ð</div>
+        </div>
+    </div>
+
+    <input type="file" id="genericFileInput" class="hidden-file-input" onchange="handleFileTransmission(this, 'file')">
+    <input type="file" id="galleryFileInput" class="hidden-file-input" accept="image/*,video/*" onchange="handleFileTransmission(this, 'gallery')">
+    <input type="file" id="cameraFileInput" class="hidden-file-input" accept="image/*,video/*" capture="environment" onchange="handleFileTransmission(this, 'camera')">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <script>
+        let audioCtx = null;
+        let bgTimeout = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playMessageSound() {
+            try {
+                initAudio();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.25);
+            } catch(e) { console.log(e); }
+        }
+
+        function startChillMusic() {
+            try {
+                initAudio();
+                const notes = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33];
+                function playNextNote() {
+                    if (!audioCtx) return;
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    const randomNote = notes[Math.floor(Math.random() * notes.length)];
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(randomNote, audioCtx.currentTime);
+                    gain.gain.setValueAtTime(0.0, audioCtx.currentTime);
+                    gain.gain.linearRampToValueAtTime(0.35, audioCtx.currentTime + 0.4); 
+                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 2.8); 
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 3.0);
+                    const randomDelay = Math.floor(Math.random() * 1600) + 1200;
+                    bgTimeout = setTimeout(playNextNote, randomDelay);
+                }
+                playNextNote();
+            } catch(e) { console.log(e); }
+        }
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xd4a373);
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+        const warmLight = new THREE.DirectionalLight(0xffeacc, 0.3);
+        warmLight.position.set(5, 8, 5);
+        scene.add(warmLight);
+        const cube = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({color: 0x00fff0, wireframe: true}));
+        scene.add(cube);
+        camera.position.z = 4;
+
+        let player1Mesh, player2Mesh;
+        let animationTime = 0;
+
+        function animate() { 
+            requestAnimationFrame(animate);
+            if(cube && scene.children.includes(cube)) {
+                cube.rotation.x += 0.01;
+                cube.rotation.y += 0.01; 
+            }
+            animationTime += 0.04;
+            let breatheY = Math.sin(animationTime) * 0.025;
+            let breatheScale = 1 + Math.sin(animationTime) * 0.015;
+            if (player1Mesh) {
+                player1Mesh.position.y = 0.5 + breatheY;
+                player1Mesh.scale.set(breatheScale, breatheScale, breatheScale);
+            }
+            if (player2Mesh) {
+                player2Mesh.position.y = 0.5 + breatheY;
+                player2Mesh.scale.set(breatheScale, breatheScale, breatheScale);
+            }
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        const shortId = Math.floor(100000 + Math.random() * 900000).toString();
+        const peer = new Peer(shortId);
+        let conn, isHost = false;
+        let localStream = null;
+        let activeCallSession = null;
+        let mediaRecorder = null;
+        let voiceAudioChunks = [];
+        let isVoiceRecording = false;
+        let targetPeerId = null;
+        let currentCallIsVideo = false;
+        let isUpgradingCall = false; 
+
+        let myMicMuted = false;
+        let remoteAudioMuted = false;
+        let myCamMuted = false;
+
+        peer.on('open', id => {
+            document.getElementById('status').innerHTML = 'Your ID: <b style="color:#00fff0; font-size:16px;">' + id + '</b>';
+        });
+
+        function connect() {
+            const id = document.getElementById('peerId').value.trim();
+            if(!id) return alert("Please enter a valid ID!");
+            document.getElementById('status').innerText = 'Connecting...';
+            targetPeerId = id;
+            conn = peer.connect(id);
+            isHost = false;
+            setupConnection();
+        }
+
+        peer.on('connection', c => { 
+            conn = c; 
+            isHost = true; 
+            targetPeerId = c.peer;
+            setupConnection(); 
+        });
+
+        function setupConnection() {
+            conn.on('open', () => {
+                document.getElementById('status').innerText = 'Connected!';
+                document.getElementById('joinBtn').style.display = 'block';
+                document.getElementById('callBar').style.display = 'flex';
+                
+                conn.on('data', data => {
+                    if (data === 'JOIN_ROOM') {
+                        joinRoom(false);
+                    } else if (data.type === 'chat') {
+                        addMessage('Friend', data.text);
+                        showBubble('Friend', "Sent a message");
+                        playMessageSound();
+                    } else if (data.type === 'typing') {
+                        document.getElementById('typing').innerText = data.text ? 'Friend is typing...' : '';
+                    } else if (data.type === 'media') {
+                        addMediaMessage('Friend', data);
+                        showBubble('Friend', "Sent a file");
+                        playMessageSound();
+                    } else if (data.type === 'call_decline') {
+                        resetCallInterface();
+                        alert("Call ended or declined by your friend.");
+                    } else if (data.type === 'camera_request') {
+                        let acceptCam = confirm("Friend wants to switch to Video Call. Accept?");
+                        if(acceptCam) {
+                            upgradeToVideoCall();
+                        }
+                    } else if (data.type === 'camera_accepted') {
+                        upgradeLocalStreamToVideo();
+                    }
+                });
+            });
+        }
+
+        peer.on('call', call => {
+            activeCallSession = call;
+            currentCallIsVideo = call.options && call.options.metadata && call.options.metadata.video;
+            
+            document.getElementById('callOverlay').style.display = 'flex';
+            document.getElementById('callStateTitle').innerText = isUpgradingCall ? "Call Active" : "Incoming Call...";
+            document.getElementById('callTypeSub').innerText = currentCallIsVideo ? "Incoming Video Call" : "Incoming Voice Call";
+            
+            if (!isUpgradingCall) {
+                document.getElementById('incomingControls').style.display = 'flex';
+                document.getElementById('activeControls').style.display = 'none';
+                document.getElementById('videoGrid').style.display = 'none';
+            } else {
+                acceptIncomingCall();
+            }
+        });
+
+        async function initiateCall(wantVideo) {
+            if(!targetPeerId) return alert("No peer connected to call.");
+            currentCallIsVideo = wantVideo;
+            try {
+                document.getElementById('callOverlay').style.display = 'flex';
+                document.getElementById('callStateTitle').innerText = "Calling Friend...";
+                document.getElementById('callTypeSub').innerText = wantVideo ? "Video Call Session" : "Voice Call Session";
+                document.getElementById('incomingControls').style.display = 'none';
+                document.getElementById('activeControls').style.display = 'flex';
+                
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    audio: true,
+                    video: wantVideo
+                });
+
+                if(wantVideo) {
+                    document.getElementById('videoGrid').style.display = 'block';
+                    document.getElementById('localVideo').srcObject = localStream;
+                }
+
+                activeCallSession = peer.call(targetPeerId, localStream, {
+                    metadata: { video: wantVideo }
+                });
+                handleCallStreamFlow(activeCallSession, wantVideo);
+            } catch(err) {
+                console.error("Failed to capture local hardware stream context:", err);
+                alert("Could not access camera/microphone initialization layer.");
+                resetCallInterface();
+            }
+        }
+
+        async function acceptIncomingCall() {
+            try {
+                if (localStream && !isUpgradingCall) {
+                    localStream.getTracks().forEach(track => track.stop());
+                }
+                
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    audio: true,
+                    video: currentCallIsVideo
+                });
+
+                document.getElementById('incomingControls').style.display = 'none';
+                document.getElementById('activeControls').style.display = 'flex';
+
+                if(currentCallIsVideo) {
+                    document.getElementById('videoGrid').style.display = 'block';
+                    document.getElementById('localVideo').srcObject = localStream;
+                }
+
+                activeCallSession.answer(localStream);
+                handleCallStreamFlow(activeCallSession, currentCallIsVideo);
+                isUpgradingCall = false; 
+            } catch(err) {
+                console.error("Error answering incoming media flow context:", err);
+                alert("Could not initialize device peripherals to answer call.");
+                declineOrHangupCall();
+            }
+        }
+
+        function handleCallStreamFlow(call, isVideo) {
+            call.on('stream', remoteStream => {
+                document.getElementById('callStateTitle').innerText = "Call Active";
+                document.getElementById('incomingControls').style.display = 'none';
+                document.getElementById('activeControls').style.display = 'flex';
+                
+                if(isVideo || currentCallIsVideo) {
+                    document.getElementById('videoGrid').style.display = 'block';
+                    document.getElementById('remoteVideo').srcObject = remoteStream;
+                } else {
+                    document.getElementById('videoGrid').style.display = 'none';
+                    let audioNode = document.getElementById('hiddenRemoteAudio');
+                    if(!audioNode) {
+                        audioNode = document.createElement('audio');
+                        audioNode.id = 'hiddenRemoteAudio';
+                        audioNode.autoplay = true;
+                        document.body.appendChild(audioNode);
+                    }
+                    audioNode.srcObject = remoteStream;
+                }
+            });
+            call.on('close', () => {
+                if (!isUpgradingCall) {
+                    resetCallInterface();
+                }
+            });
+        }
+
+        function requestOrToggleCamera() {
+            if(!currentCallIsVideo) {
+                if(conn) conn.send({type: 'camera_request'});
+                alert("Camera request sent to friend.");
+            } else {
+                toggleCamera();
+            }
+        }
+
+        async function upgradeToVideoCall() {
+            if(conn) conn.send({type: 'camera_accepted'});
+            await upgradeLocalStreamToVideo();
+        }
+
+        async function upgradeLocalStreamToVideo() {
+            try {
+                isUpgradingCall = true;
+                if(localStream) {
+                    localStream.getTracks().forEach(t => t.stop());
+                }
+                currentCallIsVideo = true;
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+                document.getElementById('videoGrid').style.display = 'block';
+                document.getElementById('localVideo').srcObject = localStream;
+                document.getElementById('callTypeSub').innerText = "Video Call Session";
+                document.getElementById('callStateTitle').innerText = "Call Active";
+
+                if(activeCallSession) activeCallSession.close();
+                activeCallSession = peer.call(targetPeerId, localStream, { metadata: { video: true } });
+                handleCallStreamFlow(activeCallSession, true);
+                
+                setTimeout(() => { isUpgradingCall = false; }, 1000);
+            } catch(e) {
+                console.error(e);
+                isUpgradingCall = false;
+            }
+        }
+
+        function declineOrHangupCall() {
+            isUpgradingCall = false;
+            if(conn) conn.send({type: 'call_decline'});
+            if(activeCallSession) {
+                activeCallSession.close();
+            }
+            resetCallInterface();
+        }
+
+        function resetCallInterface() {
+            if (isUpgradingCall) return; 
+            
+            document.getElementById('callOverlay').style.display = 'none';
+            if(localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            const audioNode = document.getElementById('hiddenRemoteAudio');
+            if(audioNode) audioNode.remove();
+            
+            myMicMuted = false;
+            remoteAudioMuted = false;
+            myCamMuted = false;
+            currentCallIsVideo = false;
+            document.getElementById('muteMeBtn').classList.remove('muted-active');
+            document.getElementById('muteFriendBtn').classList.remove('muted-active');
+            document.getElementById('toggleCamBtn').classList.remove('muted-active');
+            document.getElementById('remoteVideo').srcObject = null;
+            document.getElementById('localVideo').srcObject = null;
+        }
+
+        function toggleMuteMe() {
+            if(!localStream) return;
+            myMicMuted = !myMicMuted;
+            localStream.getAudioTracks().forEach(t => t.enabled = !myMicMuted);
+            document.getElementById('muteMeBtn').classList.toggle('muted-active', myMicMuted);
+        }
+
+        function toggleMuteFriend() {
+            remoteAudioMuted = !remoteAudioMuted;
+            const remoteVideoEl = document.getElementById('remoteVideo');
+            const hiddenAudioEl = document.getElementById('hiddenRemoteAudio');
+            if(remoteVideoEl) remoteVideoEl.muted = remoteAudioMuted;
+            if(hiddenAudioEl) hiddenAudioEl.muted = remoteAudioMuted;
+            document.getElementById('muteFriendBtn').classList.toggle('muted-active', remoteAudioMuted);
+        }
+
+        function toggleCamera() {
+            if(!localStream || localStream.getVideoTracks().length === 0) return;
+            myCamMuted = !myCamMuted;
+            localStream.getVideoTracks().forEach(t => t.enabled = !myCamMuted);
+            document.getElementById('toggleCamBtn').classList.toggle('muted-active', myCamMuted);
+        }
+
+        function toggleSharePopover() {
+            const pop = document.getElementById('sharePopover');
+            pop.style.display = (pop.style.display === 'flex') ? 'none' : 'flex';
+        }
+
+        function triggerFileInput(type) {
+            document.getElementById('sharePopover').style.display = 'none';
+            if(type === 'file') document.getElementById('genericFileInput').click();
+            if(type === 'gallery') document.getElementById('galleryFileInput').click();
+            if(type === 'camera') document.getElementById('cameraFileInput').click();
+        }
+
+        function handleFileTransmission(inputEl, contextMode) {
+            const file = inputEl.files[0];
+            if(!file || !conn) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const payload = {
+                    type: 'media',
+                    mime: file.type,
+                    name: file.name,
+                    dataUrl: e.target.result
+                };
+                conn.send(payload);
+                addMediaMessage('You', payload);
+                showBubble('You', "Sent attachments");
+            };
+            reader.readAsDataURL(file);
+            inputEl.value = '';
+        }
+
+        function addMediaMessage(sender, payload) {
+            const div = document.getElementById('messages');
+            let contentMarker = '';
+
+            if(payload.mime.startsWith('image/')) {
+                contentMarker = `<img src="${payload.dataUrl}" alt="shared image" onclick="window.open(this.src)"/>`;
+            } else if(payload.mime.startsWith('video/')) {
+                contentMarker = `<video src="${payload.dataUrl}" controls playsinline></video>`;
+            } else if(payload.mime.startsWith('audio/')) {
+                contentMarker = `<audio src="${payload.dataUrl}" controls></audio>`;
+            } else {
+                contentMarker = `<a href="${payload.dataUrl}" download="${payload.name}" class="file-link">ð Download ${payload.name}</a>`;
+            }
+
+            div.innerHTML += `<div><b>${sender}:</b> ${contentMarker}</div>`;
+            div.scrollTop = div.scrollHeight;
+        }
+
+        async function toggleVoiceRecording() {
+            const recBtn = document.getElementById('voiceRecBtn');
+            if(!isVoiceRecording) {
+                try {
+                    const recStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    voiceAudioChunks = [];
+                    mediaRecorder = new MediaRecorder(recStream);
+                    
+                    mediaRecorder.ondataavailable = e => {
+                        if (e.data.size > 0) voiceAudioChunks.push(e.data);
+                    };
+
+                    mediaRecorder.onstop = () => {
+                        const audioBlob = new Blob(voiceAudioChunks, { type: 'audio/webm' });
+                        const reader = new FileReader();
+                        reader.onload = function(e) {
+                            if(conn) {
+                                const payload = {
+                                    type: 'media',
+                                    mime: 'audio/webm',
+                                    name: 'voice_message.webm',
+                                    dataUrl: e.target.result
+                                };
+                                conn.send(payload);
+                                addMediaMessage('You', payload);
+                                showBubble('You', "Voice Message");
+                            }
+                        };
+                        reader.readAsDataURL(audioBlob);
+                        recStream.getTracks().forEach(t => t.stop());
+                    };
+
+                    mediaRecorder.start();
+                    isVoiceRecording = true;
+                    recBtn.classList.add('active-rec');
+                } catch(err) {
+                    console.error("Audio capture session error context:", err);
+                    alert("Could not initialize microphone hardware routing mapping layer.");
+                }
+            } else {
+                if(mediaRecorder && mediaRecorder.state !== 'inactive') {
+                    mediaRecorder.stop();
+                }
+                isVoiceRecording = false;
+                recBtn.classList.remove('active-rec');
+            }
+        }
+
+        function joinRoom(shouldSendSignal) {
+            if (shouldSendSignal && conn) {
+                conn.send('JOIN_ROOM');
+            }
+            scene.remove(cube);
+            startChillMusic();
+            const floorMat = new THREE.MeshStandardMaterial({color: 0x5c4033, roughness: 0.7});
+            const floor = new THREE.Mesh(new THREE.BoxGeometry(12, 0.2, 10), floorMat);
+            floor.position.y = -0.1;
+            scene.add(floor);
+
+            const carpetMat = new THREE.MeshStandardMaterial({color: 0x990000, roughness: 0.9});
+            const carpet = new THREE.Mesh(new THREE.BoxGeometry(5.5, 0.02, 3.5), carpetMat);
+            carpet.position.set(0, 0.01, 0);
+            scene.add(carpet);
+
+            const wallMat = new THREE.MeshStandardMaterial({color: 0xe67e22, roughness: 0.6});
+            const backWall = new THREE.Mesh(new THREE.BoxGeometry(12, 6, 0.2), wallMat);
+            backWall.position.set(0, 3, -5);
+            scene.add(backWall);
+            
+            const skyMat = new THREE.MeshBasicMaterial({color: 0x5dade2});
+            const sky = new THREE.Mesh(new THREE.PlaneGeometry(3, 2), skyMat);
+            sky.position.set(0, 3.5, -4.95);
+            scene.add(sky);
+
+            const windowGroup = new THREE.Group();
+            windowGroup.position.set(0, 3.5, -4.9);
+            const glassMat = new THREE.MeshStandardMaterial({color: 0xffffff, transparent: true, opacity: 0.3, roughness: 0.1});
+            const glass = new THREE.Mesh(new THREE.PlaneGeometry(3, 2), glassMat);
+            windowGroup.add(glass);
+
+            const frameMat = new THREE.MeshStandardMaterial({color: 0xffffff});
+            const borderTopBot = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.1, 0.15), frameMat); borderTopBot.position.set(0, 1, 0); windowGroup.add(borderTopBot);
+            const borderTopBot2 = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.1, 0.15), frameMat); borderTopBot2.position.set(0, -1, 0); windowGroup.add(borderTopBot2);
+            const borderLeftRight = new THREE.Mesh(new THREE.BoxGeometry(0.1, 2.1, 0.15), frameMat); borderLeftRight.position.set(1.5, 0, 0); windowGroup.add(borderLeftRight);
+            const borderLeftRight2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 2.1, 0.15), frameMat); borderLeftRight2.position.set(-1.5, 0, 0); windowGroup.add(borderLeftRight2);
+            const horizBar = new THREE.Mesh(new THREE.BoxGeometry(3, 0.08, 0.1), frameMat); windowGroup.add(horizBar);
+            const vertBar = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2, 0.1), frameMat); windowGroup.add(vertBar);
+            scene.add(windowGroup);
+
+            const lampGroup = new THREE.Group();
+            lampGroup.position.set(0, 6, 0);
+
+            const wireMat = new THREE.MeshBasicMaterial({color: 0x111111});
+            const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.8), wireMat); wire.position.y = -0.9; lampGroup.add(wire);
+
+            const bulbMat = new THREE.MeshBasicMaterial({color: 0xfff2cc});
+            const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 16), bulbMat); bulb.position.y = -1.8; lampGroup.add(bulb);
+            scene.add(lampGroup);
+            const spotLight = new THREE.SpotLight(0xfff2cc, 3.5, 10, Math.PI / 4, 0.5, 1);
+            spotLight.position.set(0, 4.2, 0);
+            spotLight.target.position.set(0, 0, 0);
+            scene.add(spotLight);
+            scene.add(spotLight.target);
+            const table = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.6, 1.8), new THREE.MeshStandardMaterial({color: 0x4a2c11, roughness: 0.5}));
+            table.position.set(0, 0.3, 0);
+            scene.add(table);
+
+            camera.position.set(0, 3.5, 6.5);
+            camera.lookAt(0, 0.8, 0);
+
+            let p1LabelText = isHost ? "You" : "Friend";
+            let p2LabelText = isHost ? "Friend" : "You";
+            player1Mesh = createCharacter(0x0055ff);
+            player1Mesh.position.set(-2.3, 0.5, 0);
+            player1Mesh.lookAt(0, 0.5, 0);
+            
+            const p1Label = createLabel(p1LabelText); p1Label.position.y = 0.85; player1Mesh.add(p1Label);
+            scene.add(player1Mesh);
+            player2Mesh = createCharacter(0xff2233);
+            player2Mesh.position.set(2.3, 0.5, 0);
+            player2Mesh.lookAt(0, 0.5, 0);
+            
+            const p2Label = createLabel(p2LabelText); p2Label.position.y = 0.85; player2Mesh.add(p2Label);
+            scene.add(player2Mesh);
+            document.getElementById('ui').style.display = 'none';
+            document.getElementById('chatBox').style.display = 'flex';
+        }
+
+        function createLabel(text, isBubble = false) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            if(isBubble) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+                ctx.roundRect(10, 10, 492, 108, 20);
+                ctx.fill();
+                ctx.font = 'bold 24px Arial';
+                ctx.fillStyle = '#111111';
+            } else {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+                ctx.roundRect(100, 30, 312, 68, 12);
+                ctx.fill();
+                ctx.font = 'bold 28px Arial';
+                ctx.fillStyle = '#ffffff';
+            }
+            
+            ctx.textAlign = 'center';
+            ctx.fillText(text, 256, 74);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMat = new THREE.SpriteMaterial({ map: texture });
+            const sprite = new THREE.Sprite(spriteMat);
+            sprite.scale.set(2.5, 0.6, 1);
+            return sprite;
+        }
+
+        function createCharacter(color) {
+            const group = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.SphereGeometry(0.5, 32, 32), new THREE.MeshStandardMaterial({color: color, roughness: 0.3}));
+            group.add(body);
+            
+            const eyeMat = new THREE.MeshBasicMaterial({color: 0xffffff});
+            const pupilMat = new THREE.MeshBasicMaterial({color: 0x000000});
+            const eyeGeo = new THREE.SphereGeometry(0.08, 16, 16);
+            
+            const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+            leftEye.position.set(-0.18, 0.15, 0.42);
+            const rightEye = new THREE.Mesh(eyeGeo, eyeMat); rightEye.position.set(0.18, 0.15, 0.42);
+            const leftPupil = new THREE.Mesh(eyeGeo, pupilMat); leftPupil.scale.set(0.5,0.5,0.5);
+            leftPupil.position.set(-0.18, 0.15, 0.48);
+            const rightPupil = new THREE.Mesh(eyeGeo, pupilMat); rightPupil.scale.set(0.5,0.5,0.5); rightPupil.position.set(0.18, 0.15, 0.48);
+            
+            group.add(leftEye, rightEye, leftPupil, rightPupil);
+            return group;
+        }
+
+        const chatInput = document.getElementById('chatInput');
+        chatInput.addEventListener('input', () => {
+            if (conn) {
+                conn.send({type: 'typing', text: chatInput.value.length > 0});
+            }
+        });
+        chatInput.onkeypress = (e) => {
+            if (e.key === 'Enter' && conn) {
+                const msg = chatInput.value;
+                if(!msg.trim()) return;
+                
+                conn.send({type: 'chat', text: msg});
+                addMessage('You', msg);
+                showBubble('You', "Sent text");
+                
+                chatInput.value = '';
+                conn.send({type: 'typing', text: false});
+            }
+        };
+
+        function addMessage(sender, text) {
+            const div = document.getElementById('messages');
+            div.innerHTML += `<div><b>${sender}:</b> ${text}</div>`;
+            div.scrollTop = div.scrollHeight;
+        }
+
+        function showBubble(target, text) {
+            let activeMesh = null;
+            if(target === 'You') {
+                activeMesh = isHost ? player1Mesh : player2Mesh;
+            } else {
+                activeMesh = isHost ? player2Mesh : player1Mesh;
+            }
+            if(!activeMesh) return;
+            activeMesh.children.forEach(child => {
+                if(child.isBubbleSprite) activeMesh.remove(child);
+            });
+            const bubbleSprite = createLabel(text, true);
+            bubbleSprite.position.y = 1.4; 
+            bubbleSprite.isBubbleSprite = true;
+            activeMesh.add(bubbleSprite);
+            setTimeout(() => {
+                activeMesh.remove(bubbleSprite);
+            }, 5000);
+        }
+
+        window.addEventListener('click', (e) => {
+            const pop = document.getElementById('sharePopover');
+            if(!e.target.innerText.includes('â') && pop.style.display === 'flex') {
+                pop.style.display = 'none';
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
