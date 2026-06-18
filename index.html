@@ -554,29 +554,35 @@
             div.scrollTop = div.scrollHeight;
         }
 
-        async function toggleVoiceRecording() {
+async function toggleVoiceRecording() {
             const recBtn = document.getElementById('voiceRecBtn');
+            const timer = document.getElementById('timerDisplay');
+            
             if(!isVoiceRecording) {
                 try {
                     const recStream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     voiceAudioChunks = [];
-                    mediaRecorder = new MediaRecorder(recStream);
                     
-                    mediaRecorder.ondataavailable = e => {
-                        if (e.data.size > 0) voiceAudioChunks.push(e.data);
-                    };
+                    // Timer Start
+                    seconds = 0;
+                    timer.innerText = "0s";
+                    timerInterval = setInterval(() => {
+                        seconds++;
+                        timer.innerText = seconds + "s";
+                    }, 1000);
 
+                    mediaRecorder = new MediaRecorder(recStream);
+                    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) voiceAudioChunks.push(e.data); };
                     mediaRecorder.onstop = () => {
+                        // Timer Stopp
+                        clearInterval(timerInterval);
+                        timer.innerText = "";
+                        
                         const audioBlob = new Blob(voiceAudioChunks, { type: 'audio/webm' });
                         const reader = new FileReader();
                         reader.onload = function(e) {
                             if(conn) {
-                                const payload = {
-                                    type: 'media',
-                                    mime: 'audio/webm',
-                                    name: 'voice_message.webm',
-                                    dataUrl: e.target.result
-                                };
+                                const payload = { type: 'media', mime: 'audio/webm', name: 'voice_message.webm', dataUrl: e.target.result };
                                 conn.send(payload);
                                 addMediaMessage('You', payload);
                                 showBubble('You', "Voice Message");
@@ -585,13 +591,12 @@
                         reader.readAsDataURL(audioBlob);
                         recStream.getTracks().forEach(t => t.stop());
                     };
-
                     mediaRecorder.start();
                     isVoiceRecording = true;
                     recBtn.classList.add('active-rec');
                 } catch(err) {
-                    console.error("Audio capture session error context:", err);
-                    alert("Could not initialize microphone hardware routing mapping layer.");
+                    console.error("Audio error:", err);
+                    alert("Could not initialize microphone.");
                 }
             } else {
                 if(mediaRecorder && mediaRecorder.state !== 'inactive') {
@@ -599,6 +604,8 @@
                 }
                 isVoiceRecording = false;
                 recBtn.classList.remove('active-rec');
+                clearInterval(timerInterval);
+                timer.innerText = "";
             }
         }
 
